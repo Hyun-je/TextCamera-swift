@@ -2,6 +2,8 @@
 
 TextCamera is an iOS app that recognizes text from camera-captured images and provides it in an editable format.
 
+![Icon](https://github.com/user-attachments/assets/b74ad0e5-696a-4f91-a2c3-74ea79958251)
+
 ## Key Features
 
 - Full-screen camera live preview
