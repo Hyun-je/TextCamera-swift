@@ -6,6 +6,7 @@ class TextRecognizer: ObservableObject {
     @Published var recognizedText = ""
     @Published var isRecognizing = false
     @Published var selectedLanguage: RecognitionLanguage = .english
+    @Published var textObservations: [VNRecognizedTextObservation] = []
     
     enum RecognitionLanguage: String, CaseIterable, Identifiable {
         case english = "en-US"
@@ -33,14 +34,17 @@ class TextRecognizer: ObservableObject {
     
     func recognizeText(from image: UIImage, completion: @escaping (String) -> Void) {
         isRecognizing = true
-        
-        guard let cgImage = image.cgImage else {
+
+        // Create CGImage with correct orientation
+        let ciImage = CIImage(image: image)!
+        let context = CIContext(options: nil)
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
             isRecognizing = false
             completion("")
             return
         }
-        
-        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+
+        let requestHandler = VNImageRequestHandler(cgImage: cgImage, orientation: CGImagePropertyOrientation(image.imageOrientation), options: [:])
         let request = VNRecognizeTextRequest { [weak self] request, error in
             guard let self = self else { return }
             
@@ -64,8 +68,9 @@ class TextRecognizer: ObservableObject {
             let recognizedText = observations.compactMap { observation in
                 observation.topCandidates(1).first?.string
             }.joined(separator: "\n")
-            
+
             DispatchQueue.main.async {
+                self.textObservations = observations
                 self.recognizedText = recognizedText
                 self.isRecognizing = false
                 completion(recognizedText)
@@ -88,7 +93,37 @@ class TextRecognizer: ObservableObject {
         }
     }
     
+    func boundingBox(for observation: VNRecognizedTextObservation, in imageSize: CGSize) -> CGRect {
+        // Vision's coordinate system is normalized (0,0 is bottom-left) and needs to be converted to UIKit's coordinate system (0,0 is top-left)
+        let boundingBox = observation.boundingBox
+        
+        
+        return CGRect(
+            x: boundingBox.origin.x * imageSize.width,
+            y: (1 - boundingBox.origin.y) * imageSize.height,
+            width: boundingBox.width * imageSize.width,
+            height: boundingBox.height * imageSize.height
+        )
+    }
+    
     func copyToClipboard() {
         UIPasteboard.general.string = recognizedText
     }
 } 
+
+
+extension CGImagePropertyOrientation {
+    init(_ uiImageOrientation: UIImage.Orientation) {
+        switch uiImageOrientation {
+        case .up: self = .up
+        case .down: self = .down
+        case .left: self = .left
+        case .right: self = .right
+        case .upMirrored: self = .upMirrored
+        case .downMirrored: self = .downMirrored
+        case .leftMirrored: self = .leftMirrored
+        case .rightMirrored: self = .rightMirrored
+        default: self = .up
+        }
+    }
+}
