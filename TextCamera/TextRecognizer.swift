@@ -36,7 +36,7 @@ class TextRecognizer: ObservableObject {
         isRecognizing = true
 
         // Create CGImage with correct orientation
-        let ciImage = CIImage(image: image)!
+        let ciImage = CIImage(image: image)!.oriented(CGImagePropertyOrientation(image.imageOrientation))
         let context = CIContext(options: nil)
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
             isRecognizing = false
@@ -44,7 +44,7 @@ class TextRecognizer: ObservableObject {
             return
         }
 
-        let requestHandler = VNImageRequestHandler(cgImage: cgImage, orientation: CGImagePropertyOrientation(image.imageOrientation), options: [:])
+        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         let request = VNRecognizeTextRequest { [weak self] request, error in
             guard let self = self else { return }
             
