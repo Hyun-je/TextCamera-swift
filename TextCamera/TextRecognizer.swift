@@ -41,8 +41,8 @@ class TextRecognizer: ObservableObject {
 
         // Slice the image into vertical patches with overlap
         let patchWidth = ciImage.extent.width
-        let patchHeight = ciImage.extent.height / 2
-        let overlapHeight = patchHeight / 4
+        let patchHeight = ciImage.extent.height / 8
+        let overlapHeight = patchHeight / 2
         let patchCount = Int(ceil((ciImage.extent.height - overlapHeight) / (patchHeight - overlapHeight)))
 
         var imagePatches: [CGImage] = []
@@ -56,6 +56,15 @@ class TextRecognizer: ObservableObject {
             }
             imagePatches.append(cgImage)
         }
+
+        // Save imagePatches to gallery
+        #if 0
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        for (index, patch) in imagePatches.enumerated() {
+            UIImageWriteToSavedPhotosAlbum(UIImage(cgImage: patch), nil, nil, nil)
+        }
+        #endif
+
 
         // Run text recognition on each image patch
         var allObservations: [VNRecognizedTextObservation] = []
@@ -79,9 +88,9 @@ class TextRecognizer: ObservableObject {
                     let yOffset = CGFloat(index) * (patchHeight - overlapHeight) / ciImage.extent.height
                     let adjustedBoundingBox = CGRect(
                         x: observation.boundingBox.origin.x,
-                        y: observation.boundingBox.origin.y / 2 + CGFloat(yOffset),
+                        y: observation.boundingBox.origin.y / 8 + CGFloat(yOffset),
                         width: observation.boundingBox.width,
-                        height: observation.boundingBox.height / 2
+                        height: observation.boundingBox.height / 8
                     )
                     let adjusted = VNRecognizedTextObservation(boundingBox: adjustedBoundingBox)
                     return adjusted
@@ -92,7 +101,7 @@ class TextRecognizer: ObservableObject {
             
             // Configure recognition language
             request.recognitionLanguages = [selectedLanguage.rawValue]
-            request.usesLanguageCorrection = true
+            request.recognitionLevel = .accurate
             
             do {
                 try requestHandler.perform([request])
