@@ -38,58 +38,87 @@ class TextRecognizer: ObservableObject {
         // Create CGImage with correct orientation
         let ciImage = CIImage(image: image)!.oriented(CGImagePropertyOrientation(image.imageOrientation))
         let context = CIContext(options: nil)
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
-            isRecognizing = false
-            completion("")
-            return
+
+        // Slice the image into vertical patches with overlap
+        let patchWidth = ciImage.extent.width
+        let patchHeight = ciImage.extent.height / 2
+        let overlapHeight = patchHeight / 4
+        let patchCount = Int(ceil((ciImage.extent.height - overlapHeight) / (patchHeight - overlapHeight)))
+
+        var imagePatches: [CGImage] = []
+        for i in 0..<patchCount {
+            let cropRect = CGRect(x: 0, y: CGFloat(i) * (patchHeight - overlapHeight), width: patchWidth, height: patchHeight)
+            let croppedImage = ciImage.cropped(to: cropRect)
+            guard let cgImage = context.createCGImage(croppedImage, from: croppedImage.extent) else {
+                isRecognizing = false
+                completion("")
+                return
+            }
+            imagePatches.append(cgImage)
         }
 
-        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        let request = VNRecognizeTextRequest { [weak self] request, error in
+        // Run text recognition on each image patch
+        var allObservations: [VNRecognizedTextObservation] = []
+        let group = DispatchGroup()
+        
+        for (index, patch) in imagePatches.enumerated() {
+            group.enter()
+            
+            let requestHandler = VNImageRequestHandler(cgImage: patch, orientation: .up)
+            let request = VNRecognizeTextRequest { [weak self] request, error in
+                defer { group.leave() }
+                
+                guard error == nil,
+                      let observations = request.results as? [VNRecognizedTextObservation] else {
+                    return
+                }
+                
+                // Adjust y coordinates based on patch index
+                let adjustedObservations = observations.map { observation -> VNRecognizedTextObservation in
+                    // Adjust y coordinate based on patch position
+                    let yOffset = CGFloat(index) * (patchHeight - overlapHeight) / ciImage.extent.height
+                    let adjustedBoundingBox = CGRect(
+                        x: observation.boundingBox.origin.x,
+                        y: observation.boundingBox.origin.y / 2 + CGFloat(yOffset),
+                        width: observation.boundingBox.width,
+                        height: observation.boundingBox.height / 2
+                    )
+                    let adjusted = VNRecognizedTextObservation(boundingBox: adjustedBoundingBox)
+                    return adjusted
+                }
+                
+                allObservations.append(contentsOf: adjustedObservations)
+            }
+            
+            // Configure recognition language
+            request.recognitionLanguages = [selectedLanguage.rawValue]
+            request.usesLanguageCorrection = true
+            
+            do {
+                try requestHandler.perform([request])
+            } catch {
+                print("Error performing text recognition: \(error)")
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) { [weak self] in
             guard let self = self else { return }
             
-            if let error = error {
-                print("Text recognition error: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    self.isRecognizing = false
-                    completion("")
-                }
-                return
+            // Sort observations by vertical position
+            self.textObservations = allObservations.sorted {
+                $0.boundingBox.origin.y > $1.boundingBox.origin.y
             }
             
-            guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                DispatchQueue.main.async {
-                    self.isRecognizing = false
-                    completion("")
-                }
-                return
+            // Extract recognized text
+            let recognizedStrings = self.textObservations.compactMap { observation -> String in
+                guard let topCandidate = observation.topCandidates(1).first else { return "" }
+                return topCandidate.string
             }
             
-            let recognizedText = observations.compactMap { observation in
-                observation.topCandidates(1).first?.string
-            }.joined(separator: "\n")
-
-            DispatchQueue.main.async {
-                self.textObservations = observations
-                self.recognizedText = recognizedText
-                self.isRecognizing = false
-                completion(recognizedText)
-            }
-        }
-        
-        // Set high accuracy
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
-        
-        // Set recognition language
-        request.recognitionLanguages = [selectedLanguage.rawValue]
-        
-        do {
-            try requestHandler.perform([request])
-        } catch {
-            print("Text recognition request error: \(error.localizedDescription)")
-            isRecognizing = false
-            completion("")
+            self.recognizedText = recognizedStrings.joined(separator: "\n")
+            self.isRecognizing = false
+            completion(self.recognizedText)
         }
     }
     
