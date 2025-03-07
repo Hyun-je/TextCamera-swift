@@ -1,12 +1,14 @@
 import SwiftUI
 import AVFoundation
 import UIKit
+import PhotosUI
 
 struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     @Binding var capturedImage: UIImage?
     @Binding var isShowingCamera: Bool
     @State private var showLanguageMenu = false
+    @State private var showPhotosPicker = false
     @EnvironmentObject var textRecognizer: TextRecognizer
     
     var body: some View {
@@ -93,6 +95,18 @@ struct CameraView: View {
                     }
                     
                     Spacer()
+                    
+                    Button(action: {
+                        showPhotosPicker = true
+                    }) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .frame(width: 50, height: 50)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                    .padding(.trailing, 30)
                 }
                 .padding(.bottom, 30)
             }
@@ -110,6 +124,9 @@ struct CameraView: View {
                 title: Text("Select Recognition Language"),
                 buttons: languageButtons()
             )
+        }
+        .sheet(isPresented: $showPhotosPicker) {
+            PhotoPicker(selectedImage: $capturedImage, isPresented: $showPhotosPicker, isShowingCamera: $isShowingCamera)
         }
     }
     
@@ -324,5 +341,56 @@ extension CameraViewModel: AVCapturePhotoCaptureDelegate {
         }
         
         completionHandler?(image)
+    }
+}
+
+// MARK: - Photo Picker
+struct PhotoPicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    @Binding var isPresented: Bool
+    @Binding var isShowingCamera: Bool
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: PhotoPicker
+        
+        init(_ parent: PhotoPicker) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            parent.isPresented = false
+            
+            guard let result = results.first else { return }
+            
+            result.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] object, error in
+                if let error = error {
+                    print("Photo picker error: \(error.localizedDescription)")
+                    return
+                }
+                
+                if let image = object as? UIImage {
+                    DispatchQueue.main.async {
+                        self?.parent.selectedImage = image
+                        self?.parent.isShowingCamera = false
+                    }
+                }
+            }
+        }
     }
 } 
