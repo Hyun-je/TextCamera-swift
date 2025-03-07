@@ -58,7 +58,7 @@ class TextRecognizer: ObservableObject {
         }
 
         // Save imagePatches to gallery
-        #if 0
+        #if false
         UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
         for (index, patch) in imagePatches.enumerated() {
             UIImageWriteToSavedPhotosAlbum(UIImage(cgImage: patch), nil, nil, nil)
