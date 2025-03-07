@@ -267,7 +267,9 @@ class CameraViewModel: NSObject, ObservableObject {
         session.addInput(videoDeviceInput)
         currentInput = videoDeviceInput
         
+        // 고해상도 촬영 활성화
         if session.canAddOutput(photoOutput) {
+            photoOutput.isHighResolutionCaptureEnabled = true
             session.addOutput(photoOutput)
         }
         
@@ -298,6 +300,7 @@ class CameraViewModel: NSObject, ObservableObject {
         self.completionHandler = completion
         
         let settings = AVCapturePhotoSettings()
+        settings.isHighResolutionPhotoEnabled = true
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
     
